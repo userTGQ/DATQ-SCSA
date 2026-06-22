@@ -1,4 +1,4 @@
-# DATQ_SCSA
+# DATQ-SCSA
 This is the pytorch implementation of DATQ-SCSA. I hope these codes are helpful to you!
 
 

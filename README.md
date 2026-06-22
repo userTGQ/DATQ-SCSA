@@ -1,4 +1,4 @@
-# DATQ-SCSA: A Decoupled Adaptive Temporal Query and Soft-Clustered Spatial Attention Network for Traffic Forecasting
+# DATQ-SCSA
 This is the pytorch implementation of DATQ-SCSA. I hope these codes are helpful to you!
 
 

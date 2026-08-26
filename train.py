@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--device", type=str, default="cuda:0", help="")
 parser.add_argument("--data", type=str, default="PEMS08", help="data path")
 parser.add_argument("--input_dim", type=int, default=3, help="input_dim")
-parser.add_argument("--channels", type=int, default=64, help="number of nodes")
+parser.add_argument("--channels", type=int, default=128, help="number of nodes")
 parser.add_argument("--num_nodes", type=int, default=170, help="number of nodes")
 parser.add_argument("--input_len", type=int, default=12, help="input_len")
 parser.add_argument("--output_len", type=int, default=12, help="out_len")
@@ -44,17 +44,17 @@ args = parser.parse_args()
 
 class trainer:
     def __init__(
-        self,
-        scaler,
-        input_dim,
-        channels,
-        num_nodes,
-        input_len,
-        output_len,
-        dropout,
-        lrate,
-        wdecay,
-        device,
+            self,
+            scaler,
+            input_dim,
+            channels,
+            num_nodes,
+            input_len,
+            output_len,
+            dropout,
+            lrate,
+            wdecay,
+            device,
     ):
         self.model = DATQ_SCSA(
             device, input_dim, channels, num_nodes, input_len, output_len, dropout
@@ -102,12 +102,12 @@ class trainer:
 
 
 def seed_it(seed):
-    random.seed(seed) 
+    random.seed(seed)
     os.environ["PYTHONSEED"] = str(seed)
     np.random.seed(seed)
     torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed) 
-    torch.backends.cudnn.deterministic = True 
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.enabled = True
     torch.manual_seed(seed)
 
@@ -132,7 +132,7 @@ def main():
         args.num_nodes = 170
         args.input_len = 48
         args.output_len = 48
-    
+
     elif args.data == "PEMS08_60":
         args.data = "data//" + args.data
         args.num_nodes = 170
@@ -150,7 +150,7 @@ def main():
         args.num_nodes = 307
         args.input_len = 48
         args.output_len = 48
-    
+
     elif args.data == "PEMS04_60":
         args.data = "data//" + args.data
         args.num_nodes = 307
@@ -172,28 +172,28 @@ def main():
         args.num_nodes = 883
 
     elif args.data == "gba_his_2019":
-        args.data = "data//"+args.data
+        args.data = "data//" + args.data
         args.num_nodes = 2352
         args.epochs = 300
 
     elif args.data == "gla_his_2019":
-        args.data = "data//"+args.data
+        args.data = "data//" + args.data
         args.num_nodes = 3834
         args.epochs = 300
-    
+
     elif args.data == "ca_his_2019":
-        args.data = "data//"+args.data
+        args.data = "data//" + args.data
         args.num_nodes = 8600
         args.epochs = 300
 
     elif args.data == "bike_drop":
         args.data = "data//" + args.data
         args.num_nodes = 250
-    
+
     elif args.data == "bike_pick":
         args.data = "data//" + args.data
         args.num_nodes = 250
-    
+
     elif args.data == "taxi_drop":
         args.data = "data//" + args.data
         args.num_nodes = 266
@@ -338,7 +338,7 @@ def main():
 
         if mvalid_loss < loss:
             print("###Update tasks appear###")
-            if i < 100:
+            if i < 1:
                 # It is not necessary to print the results of the test set when epoch is less than 100, because the model has not yet converged.
                 loss = mvalid_loss
                 torch.save(engine.model.state_dict(), path + "best_model.pth")
@@ -347,7 +347,7 @@ def main():
                 print("Updating! Valid Loss:", mvalid_loss, end=", ")
                 print("epoch: ", i)
 
-            elif i > 100:
+            elif i > 1:
                 outputs = []
                 realy = torch.Tensor(dataloader["y_test"]).to(device)
                 realy = realy.transpose(1, 3)[:, 0, :, :]

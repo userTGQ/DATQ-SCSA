@@ -84,23 +84,12 @@ class TemporalEmbedding(nn.Module):
         return tem_emb
 
 
-
 class SoftClusteredSpatialAttention(nn.Module):
     """
     Soft Clustered Spatial Attention.
 
-    输入:
-        x: [B, C, N, 1]
-
-    输出:
-        out: [B, C, N, 1]
-
-    核心思想:
-        1. 使用可学习 cluster_bank 作为簇原型；
-        2. 根据当前节点特征动态计算节点到簇的软分配；
-        3. 聚合节点特征得到动态 cluster_state；
-        4. 节点从 cluster_state 中读取空间信息；
-
+    x: [B, C, N, 1]
+    out: [B, C, N, 1]
     """
 
     def __init__(
@@ -113,7 +102,6 @@ class SoftClusteredSpatialAttention(nn.Module):
         attn_dim=64,
         num_clusters=None,
         cluster_factor=5,
-
     ):
         super().__init__()
         assert seq_length == 1, "This module is specialized for T=1."
@@ -124,7 +112,6 @@ class SoftClusteredSpatialAttention(nn.Module):
         self.router_dim = router_dim
         self.attn_dim = attn_dim
 
-
         if num_clusters is None:
             num_clusters = max(
                 4,
@@ -133,17 +120,12 @@ class SoftClusteredSpatialAttention(nn.Module):
 
         self.num_clusters = min(num_nodes, num_clusters)
 
-        # =========================
-        # 1. 可学习聚类原型
-        # =========================
-        # 注意：这里不是最终簇中心，而是用于计算软分配的可学习原型。
         self.cluster_bank = nn.Parameter(torch.empty(self.num_clusters, d_model))
         nn.init.xavier_uniform_(self.cluster_bank)
 
         self.node_q2 = Conv(d_model)
         self.cluster_k = nn.Linear(d_model, d_model, bias=False)
         self.cluster_v = nn.Linear(d_model, d_model, bias=False)
-
 
         self.node_q = Conv(d_model)
         self.node_v = Conv(d_model)
@@ -152,32 +134,24 @@ class SoftClusteredSpatialAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.norm = LayerNorm([d_model, num_nodes, seq_length], elementwise_affine=False)
 
-
         self.adaptive_embedding = nn.Parameter(
             torch.empty(1, d_model, num_nodes, 1)
         )
         nn.init.xavier_uniform_(self.adaptive_embedding)
 
-        self.t = nn.Conv2d(d_model//2, d_model,1)
+        self.t = nn.Conv2d(d_model // 2, d_model, 1)
 
     def forward(self, input, tem_emb):
         """
         x: [B, C, N, 1]
         """
-        node_q=self.node_q(input)
+        node_q = self.node_q(input)
         node_v = self.node_v(input)
-
 
         # [B, C, N, 1] -> [B, N, C]
         node_q = node_q.squeeze(-1).permute(0, 2, 1).contiguous()
 
         node_v = node_v.squeeze(-1).permute(0, 2, 1).contiguous()
-
-        # =====================================================
-        # Step 2: 节点 -> 簇 的软分配
-        # =====================================================
-
-
 
         assign_logits = torch.einsum(
             "bnr,mr->bnm",
@@ -187,26 +161,18 @@ class SoftClusteredSpatialAttention(nn.Module):
 
         assign_prob = torch.softmax(assign_logits, dim=-1)  # [B, N, M]
 
-        # =====================================================
-        # Step 3: 根据软分配生成动态簇中心
-        # =====================================================
-
         cluster_context = torch.einsum(
             "bnm,bnc->bmc",
             assign_prob,
             node_v
         )  # [B, M, C]
 
-        # 加权平均，避免节点数变多导致尺度变大
         denom = assign_prob.sum(dim=1).clamp_min(1e-6)  # [B, M]
         cluster_state = cluster_context / denom.unsqueeze(-1)
 
-
-
-
-        qn = self.node_q2(input).squeeze(-1).permute(0, 2, 1).contiguous()          # [B, N, attn_dim]
-        kc = self.cluster_k(cluster_state)    # [B, M, C]
-        vc = self.cluster_v(cluster_state)    # [B, M, C]
+        qn = self.node_q2(input).squeeze(-1).permute(0, 2, 1).contiguous()  # [B, N, attn_dim]
+        kc = self.cluster_k(cluster_state)  # [B, M, C]
+        vc = self.cluster_v(cluster_state)  # [B, M, C]
 
         scores = torch.matmul(kc.transpose(1, 2), vc) / math.sqrt(self.attn_dim)
         node2cluster_attn = torch.softmax(scores, dim=-1)  # [B, N, M]
@@ -216,9 +182,10 @@ class SoftClusteredSpatialAttention(nn.Module):
         # [B, N, C] -> [B, C, N, 1]
         out = out.permute(0, 2, 1).unsqueeze(-1)
 
-        out = self.proj(out) + out * self.adaptive_embedding*F.tanh(self.t(tem_emb))
-
-
+        out = (
+            self.proj(out)
+            + out * self.adaptive_embedding * F.tanh(self.t(tem_emb))
+        )
 
         out = self.norm(out)
         out = self.dropout(out)
@@ -226,12 +193,7 @@ class SoftClusteredSpatialAttention(nn.Module):
         return out
 
 
-
-
-
-
 class TrendFluctuationDecomposition(nn.Module):
-
     def __init__(self, num_nodes=170, alpha_min=0.05, alpha_max=0.95):
         super().__init__()
         self.num_nodes = num_nodes
@@ -264,9 +226,9 @@ class TrendFluctuationDecomposition(nn.Module):
                 dim=-1
             )  # [B, N, 3]
 
-            alpha_logit = (
-                                  feat * self.gate_weight.unsqueeze(0)
-                          ).sum(dim=-1) + self.gate_bias.unsqueeze(0)
+            alpha_logit = (feat * self.gate_weight.unsqueeze(0)).sum(
+                dim=-1
+            ) + self.gate_bias.unsqueeze(0)
 
             alpha = torch.sigmoid(alpha_logit)
             alpha = self.alpha_min + (self.alpha_max - self.alpha_min) * alpha
@@ -276,7 +238,7 @@ class TrendFluctuationDecomposition(nn.Module):
 
         trend = torch.stack(trends, dim=1)
         fluctuation = x - trend
-        return fluctuation,trend
+        return fluctuation, trend
 
 
 class TemporalEmbedding2(nn.Module):
@@ -308,12 +270,6 @@ class TemporalEmbedding2(nn.Module):
         return tem_emb.permute(0, 1, 3, 2)
 
 
-
-
-
-
-
-
 class MyMultiheadAttention(nn.Module):
     def __init__(self, embed_dim, num_heads, dropout=0., batch_first=True):
         super().__init__()
@@ -323,38 +279,31 @@ class MyMultiheadAttention(nn.Module):
         self.batch_first = batch_first
         self.scale = self.head_dim ** -0.5
 
-        # QKV 投影（和官方一样）
-
         self.k_proj = nn.Linear(embed_dim, embed_dim)
         self.v_proj = nn.Linear(embed_dim, embed_dim)
 
-        # 输出投影 + Dropout
         self.out_proj = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, query, key, value, need_weights=True):
-        # --------------------------- 维度处理 ---------------------------
+
         if self.batch_first:
-            # 输入形状: [B, L, C] -> 转成 [B, H, L, D]
+
             B, Lq, _ = query.shape
             B, Lk, _ = key.shape
 
-            # 投影 Q/K/V
             q = query
             k = self.k_proj(key)
             v = self.v_proj(value)
 
-            # 拆多头
             q = q.reshape(B, Lq, self.num_heads, self.head_dim).transpose(1, 2)
             k = k.reshape(B, Lk, self.num_heads, self.head_dim).transpose(1, 2)
             v = v.reshape(B, Lk, self.num_heads, self.head_dim).transpose(1, 2)
 
-        # --------------------------- 注意力计算 ---------------------------
         attn_score = torch.matmul(q, k.transpose(-2, -1)) * self.scale  # [B, H, Lq, Lk]
         attn_weight = F.softmax(attn_score, dim=-1)
         attn_weight = self.dropout(attn_weight)
 
-        # --------------------------- 输出 ---------------------------
         out = torch.matmul(attn_weight, v)  # [B, H, Lq, D]
         out = out.transpose(1, 2).reshape(B, Lq, self.embed_dim)
         out = self.out_proj(out)
@@ -363,25 +312,24 @@ class MyMultiheadAttention(nn.Module):
 
 
 class AdaptiveTemporalQuery(nn.Module):
-    def __init__(self,
-                 dim=128,
-                 num_time=12,
-                 num_memory=4,
-                 heads=2,
-                 depth=2,
-
-                 dropout=0.1):
+    def __init__(
+        self,
+        dim=128,
+        num_time=12,
+        num_memory=4,
+        heads=2,
+        depth=2,
+        dropout=0.1,
+    ):
         super().__init__()
 
         self.dim = dim
         self.num_time = num_time
         self.num_memory = num_memory
 
-        # 时间位置编码，用于保留历史时间顺序
         self.time_pos_embedding = nn.Parameter(
             torch.randn(1, num_time, dim)
         )
-
 
         self.memory = nn.Parameter(
             torch.randn(1, 1, dim)
@@ -391,19 +339,20 @@ class AdaptiveTemporalQuery(nn.Module):
         self.layers = nn.ModuleList()
 
         for _ in range(depth):
-            self.layers.append(nn.ModuleDict({
-                "norm_m": nn.LayerNorm(dim),
-                "norm_x": nn.LayerNorm(dim),
-                "cross_attn": MyMultiheadAttention(
-    embed_dim=dim,
-    num_heads=heads,
-    dropout=dropout,
-    batch_first=True
-),
-
-            }))
-
-
+            self.layers.append(
+                nn.ModuleDict(
+                    {
+                        "norm_m": nn.LayerNorm(dim),
+                        "norm_x": nn.LayerNorm(dim),
+                        "cross_attn": MyMultiheadAttention(
+                            embed_dim=dim,
+                            num_heads=heads,
+                            dropout=dropout,
+                            batch_first=True,
+                        ),
+                    }
+                )
+            )
 
     def forward(self, x):
         """
@@ -413,30 +362,27 @@ class AdaptiveTemporalQuery(nn.Module):
 
         b, c, n, t = x.shape
 
-
-        assert t == self.num_time, \
+        assert t == self.num_time, (
             f"Expected input length {self.num_time}, but got {t}."
+        )
 
         # [B, C, N, T] -> [B, N, T, C] -> [B*N, T, C]
         x = x.permute(0, 2, 3, 1).reshape(b * n, t, c)
 
-        # 加时间位置编码
         x = x + self.time_pos_embedding[:, :t, :]
 
-        # 扩展 memory token
         # [1, K, C] -> [B*N, K, C]
         memory = self.memory.expand(b * n, -1, -1)
 
-        # memory token 作为 query，历史序列作为 key/value
         for layer in self.layers:
             q = layer["norm_m"](memory)
             kv = layer["norm_x"](x)
 
-            attn_out= layer["cross_attn"](
+            attn_out = layer["cross_attn"](
                 query=q,
                 key=kv,
                 value=kv,
-                need_weights=False
+                need_weights=False,
             )
 
             memory = attn_out
@@ -445,16 +391,17 @@ class AdaptiveTemporalQuery(nn.Module):
 
         return memory
 
+
 class DATQ_SCSA(nn.Module):
     def __init__(
-            self,
-            device,
-            input_dim=3,
-            channels=64,
-            num_nodes=170,
-            input_len=12,
-            output_len=12,
-            dropout=0.1,
+        self,
+        device,
+        input_dim=3,
+        channels=64,
+        num_nodes=170,
+        input_len=12,
+        output_len=12,
+        dropout=0.1,
     ):
         super().__init__()
 
@@ -482,7 +429,7 @@ class DATQ_SCSA(nn.Module):
             num_memory=4,
             heads=4,
             depth=3,
-            dropout=dropout
+            dropout=dropout,
         )
         self.tconv2 = AdaptiveTemporalQuery(
             dim=channels // 2,
@@ -490,7 +437,7 @@ class DATQ_SCSA(nn.Module):
             num_memory=4,
             heads=4,
             depth=3,
-            dropout=dropout
+            dropout=dropout,
         )
         self.start_conv = nn.Conv2d(1, channels // 2, kernel_size=(1, 1))
         self.start_conv2 = nn.Conv2d(1, channels // 2, kernel_size=(1, 1))
@@ -503,7 +450,7 @@ class DATQ_SCSA(nn.Module):
             dropout=0.1,
             router_dim=64,
             attn_dim=64,
-            num_clusters=int(math.log(num_nodes))
+            num_clusters=int(math.log(num_nodes)),
         )
 
         self.fc_st = nn.Conv2d(
@@ -519,7 +466,6 @@ class DATQ_SCSA(nn.Module):
 
         self.decomp = TrendFluctuationDecomposition(num_nodes)
 
-
     def param_num(self):
         return sum([param.nelement() for param in self.parameters()])
 
@@ -534,20 +480,21 @@ class DATQ_SCSA(nn.Module):
         fluctuation_init = self.start_conv(fluctuation_init.permute(0, 2, 1).unsqueeze(1))
         trend_init = self.start_conv2(trend_init.permute(0, 2, 1).unsqueeze(1))
 
-
-
         trend = self.tconv(trend_init)
         fluctuation = self.tconv2(fluctuation_init)
-
-
-
 
         tem_emb = self.Temb(history_data)
 
         zt = torch.cat(
-            (trend + fluctuation, fluctuation_init[..., -1].unsqueeze(-1) + trend_init[..., -1].unsqueeze(-1),tem_emb),
-            dim=1)
-        zs=self.SpatialBlock(zt, tem_emb)
+            (
+                trend + fluctuation,
+                fluctuation_init[..., -1].unsqueeze(-1)
+                + trend_init[..., -1].unsqueeze(-1),
+                tem_emb,
+            ),
+            dim=1,
+        )
+        zs = self.SpatialBlock(zt, tem_emb)
         zst = zs + self.fc_st(zt) * F.sigmoid(self.fc_st2(zt))
 
         prediction = self.regression_layer(zst)
